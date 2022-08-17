@@ -1,14 +1,12 @@
 package com.hfepay.sqlparser.common;
 
 import com.alibaba.druid.sql.ast.SQLObject;
-import com.alibaba.druid.sql.ast.SQLObjectImpl;
 
 import java.io.Serializable;
-import java.lang.reflect.Method;
 
 //因为SQLSelectItem的相等不比较parent，所以在查找储存select item
 //对应的expr时出错
-public class SQLObjectWrapper<T > implements Serializable {
+public class SQLObjectWrapper<T> implements Serializable {
     final private T item;
 
     public SQLObjectWrapper(T item) {
@@ -16,7 +14,7 @@ public class SQLObjectWrapper<T > implements Serializable {
     }
 
     public SQLObject getObject() {
-        if(this.item instanceof SQLObject)
+        if (this.item instanceof SQLObject)
             return (SQLObject) this.item;
         else
             return null;
@@ -25,7 +23,7 @@ public class SQLObjectWrapper<T > implements Serializable {
 
     @Override
     public int hashCode() {
-        return this.item.hashCode();
+        return System.identityHashCode(item);
     }
 
     @Override

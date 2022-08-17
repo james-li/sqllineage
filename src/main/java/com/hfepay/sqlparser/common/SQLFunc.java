@@ -1,15 +1,20 @@
 package com.hfepay.sqlparser.common;
 
+import com.alibaba.druid.DbType;
 import com.alibaba.druid.sql.ast.SQLExpr;
 import com.alibaba.druid.sql.ast.SQLObject;
+import com.alibaba.druid.sql.ast.SQLStatement;
 import com.alibaba.druid.sql.ast.expr.SQLAggregateExpr;
 import com.alibaba.druid.sql.ast.expr.SQLAllColumnExpr;
 import com.alibaba.druid.sql.ast.expr.SQLIdentifierExpr;
 import com.alibaba.druid.sql.ast.expr.SQLPropertyExpr;
-import com.alibaba.druid.sql.ast.statement.SQLSelectItem;
-import com.alibaba.druid.sql.ast.statement.SQLSelectStatement;
-import com.alibaba.druid.sql.ast.statement.SQLTableSource;
+import com.alibaba.druid.sql.ast.statement.*;
+import com.alibaba.druid.sql.repository.SchemaRepository;
 import com.alibaba.druid.util.StringUtils;
+
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.stream.Collectors;
 
 public class SQLFunc {
     public static SQLObject getParentObject(SQLObject x, Class<?> parentClass) {
@@ -48,7 +53,8 @@ public class SQLFunc {
                     == null) {
                 return true;
             }
-        }catch (Exception e){}
+        } catch (Exception e) {
+        }
         return false;
     }
 
@@ -99,5 +105,21 @@ public class SQLFunc {
 
     public static boolean isSQLAggregateExpr(SQLExpr expr) {
         return expr instanceof SQLAggregateExpr || getParentObject(expr, SQLAggregateExpr.class) != null;
+    }
+
+    public static ArrayList<String> getExprTableSourceColumn(SchemaRepository repository, SQLExprTableSource tableSource) {
+        SQLStatement stmt = repository.findTable(tableSource).getStatement();
+        if (repository.getDbType() == DbType.hive && stmt instanceof SQLCreateTableStatement) {
+            return ((SQLCreateTableStatement) stmt).getTableElementList().stream().map(Object::toString).collect(Collectors.toCollection(ArrayList::new));
+        }
+        return new ArrayList<>();
+    }
+
+    public static SQLTableSource getResovledTableSource(SQLExpr x) {
+        try{
+            return (SQLTableSource) x.getClass().getMethod("getResolvedTableSource").invoke(x);
+        }catch (Exception e){
+            return null;
+        }
     }
 }
