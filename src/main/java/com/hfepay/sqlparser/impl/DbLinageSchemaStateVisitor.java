@@ -61,7 +61,7 @@ public class DbLinageSchemaStateVisitor extends SchemaStatVisitor {
         if (x instanceof SQLIdentifierExpr) {
             ret = super.visit((SQLIdentifierExpr) x);
         } else if (x instanceof SQLPropertyExpr) {
-            ret = super.visit((SQLIdentifierExpr) x);
+            ret = super.visit((SQLPropertyExpr) x);
         } else if (x instanceof SQLAllColumnExpr) {
             ret = super.visit((SQLAllColumnExpr) x);
         }
