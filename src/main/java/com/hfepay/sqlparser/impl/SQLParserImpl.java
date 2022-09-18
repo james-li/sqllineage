@@ -11,6 +11,7 @@ import com.alibaba.druid.sql.parser.SQLStatementParser;
 import com.alibaba.druid.stat.TableStat;
 import com.hfepay.sqlparser.ISchemaRepository;
 import com.hfepay.sqlparser.SQLParser;
+import com.hfepay.sqlparser.common.SQLFunc;
 import com.hfepay.sqlparser.common.SQLObjectWrapper;
 import com.hfepay.sqlparser.common.SQLSelectStateInfo;
 
@@ -80,10 +81,15 @@ public abstract class SQLParserImpl implements SQLParser {
         HashMap<SQLObjectWrapper<SQLSelectItem>, ArrayList<TableStat.Column>> tableLinageMap =
                 (HashMap<SQLObjectWrapper<SQLSelectItem>, ArrayList<TableStat.Column>>) selectStateInfo.getTableLinageMap();
         LinkedHashMap<String, ArrayList<TableStat.Column>> tableLinage = new LinkedHashMap<>();
-        for (SQLSelectItem item : selectStmt.getSelect().getQueryBlock().getSelectList()) {
-            tableLinage.put(item.toString(), tableLinageMap.get(new SQLObjectWrapper<>(item)));
+        try {
+            for (SQLSelectItem item : selectStmt.getSelect().getQueryBlock().getSelectList()) {
+                tableLinage.put(SQLFunc.getColumnName(item), tableLinageMap.get(new SQLObjectWrapper<>(item)));
+            }
+            return tableLinage;
+        } catch (ParserException e) {
+            e.printStackTrace();
+            return null;
         }
-        return tableLinage;
     }
 
     protected abstract DbLinageSchemaStateVisitor getDbLinageSchemaStateVisitor();
@@ -102,17 +108,9 @@ public abstract class SQLParserImpl implements SQLParser {
             return null;
         try {
             SQLSelectStatement stmt = selectStmt;
-            return stmt.getSelect().getQueryBlock().getSelectList().stream().map(item -> {
-                if (item.getAlias() != null) {
-                    return item.getAlias();
-                } else if (item.getExpr() instanceof SQLIdentifierExpr) {
-                    return ((SQLIdentifierExpr) item.getExpr()).getName();
-                } else if (item.getExpr() instanceof SQLPropertyExpr) {
-                    return ((SQLPropertyExpr) item.getExpr()).getName();
-                } else {
-                    throw new ParserException("Can not parse sql expr as column: " + item.getExpr().toString());
-                }
-            }).collect(Collectors.toCollection(ArrayList::new));
+            return stmt.getSelect().getQueryBlock().getSelectList().stream()
+                    .map(SQLFunc::getColumnName)
+                    .collect(Collectors.toCollection(ArrayList::new));
         } catch (Exception e) {
             e.printStackTrace();
             return null;

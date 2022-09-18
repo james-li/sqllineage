@@ -9,6 +9,7 @@ import com.alibaba.druid.sql.ast.expr.SQLAllColumnExpr;
 import com.alibaba.druid.sql.ast.expr.SQLIdentifierExpr;
 import com.alibaba.druid.sql.ast.expr.SQLPropertyExpr;
 import com.alibaba.druid.sql.ast.statement.*;
+import com.alibaba.druid.sql.parser.ParserException;
 import com.alibaba.druid.sql.repository.SchemaRepository;
 import com.alibaba.druid.util.StringUtils;
 
@@ -116,10 +117,22 @@ public class SQLFunc {
     }
 
     public static SQLTableSource getResovledTableSource(SQLExpr x) {
-        try{
+        try {
             return (SQLTableSource) x.getClass().getMethod("getResolvedTableSource").invoke(x);
-        }catch (Exception e){
+        } catch (Exception e) {
             return null;
+        }
+    }
+
+    public static String getColumnName(SQLSelectItem item) throws ParserException {
+        if (item.getAlias() != null) {
+            return item.getAlias();
+        } else if (item.getExpr() instanceof SQLIdentifierExpr) {
+            return ((SQLIdentifierExpr) item.getExpr()).getName();
+        } else if (item.getExpr() instanceof SQLPropertyExpr) {
+            return ((SQLPropertyExpr) item.getExpr()).getName();
+        } else {
+            throw new ParserException("Can not parse sql expr as column: " + item.getExpr().toString());
         }
     }
 }
