@@ -28,7 +28,7 @@ public abstract class SQLParserImpl implements SQLParser {
     protected String sql;
     protected List<SQLStatement> stmts = null;
     protected SQLSelectStatement selectStmt = null;
-    private String dstTable = null;
+    private String dstTable = "";
 //    protected SQLWithSubqueryClause withSubqueryClauses = null;
 
     public SQLParserImpl(DbType dbType, String sql) {
