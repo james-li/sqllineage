@@ -114,9 +114,9 @@ public class SQLParserTest extends TestCase {
         repository.console("create table t_org(org_id int, name string);");
 
 
-        String sql = "select emp_id, emp_name, org_id, org_name from (SELECT emp_id, a.name AS emp_name, org_id, b.name AS org_name\n" +
+        String sql = "SELECT emp_id, a.name AS emp_name, org_id, b.name AS org_name\n" +
                 "FROM t_emp a\n" +
-                "\tINNER JOIN t_org b ON a.emp_id = b.org_id) a INNER JOIN t_org b ON a.emp_id = b.org_id ";
+                "\tINNER JOIN t_org b ON a.emp_id = b.org_id";
 
         List<SQLStatement> stmtList = SQLUtils.parseStatements(sql, dbType);
         assertEquals(1, stmtList.size());
