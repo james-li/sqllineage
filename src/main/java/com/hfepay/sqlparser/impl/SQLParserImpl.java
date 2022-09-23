@@ -15,10 +15,8 @@ import com.hfepay.sqlparser.common.SQLFunc;
 import com.hfepay.sqlparser.common.SQLObjectWrapper;
 import com.hfepay.sqlparser.common.SQLSelectStateInfo;
 
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.LinkedHashMap;
-import java.util.List;
+import javax.swing.table.TableColumn;
+import java.util.*;
 import java.util.stream.Collectors;
 
 public abstract class SQLParserImpl implements SQLParser {
@@ -27,6 +25,7 @@ public abstract class SQLParserImpl implements SQLParser {
     protected String sql;
     protected List<SQLStatement> stmts = null;
     protected SQLSelectStatement selectStmt = null;
+//    protected SQLWithSubqueryClause withSubqueryClauses = null;
 
     public SQLParserImpl(DbType dbType, String sql) {
         this.dbType = dbType;
@@ -37,10 +36,15 @@ public abstract class SQLParserImpl implements SQLParser {
             SQLStatement stmt = stmts.get(0);
             if (stmt instanceof SQLSelectStatement) {
                 selectStmt = (SQLSelectStatement) stmt;
+//                withSubqueryClauses = selectStmt.getSelect().getWithSubQuery();
             } else if (stmt instanceof SQLCreateTableStatement) {
                 selectStmt = new SQLSelectStatement(((SQLCreateTableStatement) stmt).getSelect());
+                selectStmt.getSelect().setWithSubQuery(((SQLCreateTableStatement) stmt).getSelect().getWithSubQuery());
+//                withSubqueryClauses = selectStmt.getSelect().getWithSubQuery();
             } else if (stmt instanceof SQLInsertStatement) {
                 selectStmt = new SQLSelectStatement(((SQLInsertStatement) stmt).getQuery());
+                selectStmt.getSelect().setWithSubQuery(((SQLInsertStatement) stmt).getWith());
+//                withSubqueryClauses = ((SQLInsertStatement) stmt).getWith();
             }
         } catch (ParserException e) {
             stmts = null;
@@ -59,8 +63,18 @@ public abstract class SQLParserImpl implements SQLParser {
         }
     }
 
+    /*
+
+        public SQLWithSubqueryClause getWithSubqueryClauses() {
+            return withSubqueryClauses;
+        }
+
+    */
     protected abstract SQLStatementParser getSQLParser(String sql);
 
+    public HashSet<TableStat.Column> getSourceTableColumn(SQLSelectItem item, SQLSelectStatement selectStatement) {
+        return null;
+    }
 
     /**
      * 支持通过sql分析血缘关系，支持两种sql：

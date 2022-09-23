@@ -118,8 +118,8 @@ with tmp_fee_details as (
                                       and a.pro_type = b.pro_type and a.rate_des = b.rate_des
      ),
      fee_sum as (
-         select branch_no,                                                                                 --  `机构号`,
-                branch_name,                                                                               --  `机构名称`,
+         select a.branch_no,                                                                                 --  `机构号`,
+                a.branch_name,                                                                               --  `机构名称`,
                 a.deposit_type,                                                                            --  `存款类型`,
                 c.stock_rate                                                                head_rate,     -- `与总行日均存量折比例`,
                 c.increment_rate                                                            head_rate_i,   -- `与总行日均增量折比例`,

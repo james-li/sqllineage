@@ -2,6 +2,7 @@ package com.hfepay.sqlparser.common;
 
 import com.alibaba.druid.DbType;
 import com.alibaba.druid.sql.ast.SQLExpr;
+import com.alibaba.druid.sql.ast.SQLName;
 import com.alibaba.druid.sql.ast.SQLObject;
 import com.alibaba.druid.sql.ast.SQLStatement;
 import com.alibaba.druid.sql.ast.expr.SQLAggregateExpr;
@@ -15,6 +16,7 @@ import com.alibaba.druid.util.StringUtils;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.List;
 import java.util.stream.Collectors;
 
 public class SQLFunc {
@@ -26,6 +28,13 @@ public class SQLFunc {
         return null;
     }
 
+    public static Object invokeMethod(SQLObject x, String method) {
+        try {
+            return x.getClass().getMethod(method).invoke(x);
+        } catch (Exception e) {
+            return null;
+        }
+    }
 
     public static SQLTableSource getParentTableSource(SQLObject x) {
         SQLObject parent = getParentObject(x, SQLTableSource.class);
@@ -82,12 +91,9 @@ public class SQLFunc {
         return n;
     }
 
-    public static SQLTableSource getExprTableSource(SQLExpr expr) {
-        //TODO
-        java.lang.reflect.Method method;
+    public static SQLTableSource getResolvedTableSource(SQLExpr expr) {
         try {
-            method = expr.getClass().getMethod("getResolvedTableSource");
-            return (SQLTableSource) method.invoke(expr);
+            return (SQLTableSource) invokeMethod(expr, "getResolvedTableSource");
         } catch (Exception e) {
             return null;
         }
@@ -116,13 +122,6 @@ public class SQLFunc {
         return new ArrayList<>();
     }
 
-    public static SQLTableSource getResovledTableSource(SQLExpr x) {
-        try {
-            return (SQLTableSource) x.getClass().getMethod("getResolvedTableSource").invoke(x);
-        } catch (Exception e) {
-            return null;
-        }
-    }
 
     public static String getColumnName(SQLSelectItem item) throws ParserException {
         if (item.getAlias() != null) {
@@ -134,5 +133,25 @@ public class SQLFunc {
         } else {
             throw new ParserException("Can not parse sql expr as column: " + item.getExpr().toString());
         }
+    }
+
+    public static String getName(SQLObject object) {
+        try {
+            return (String) invokeMethod(object, "getName");
+        } catch (Exception e) {
+            return "";
+        }
+    }
+
+    public static String getSimpleName(SQLObject object) {
+        try {
+            return (String) invokeMethod(object, "getSimpleName");
+        } catch (Exception e) {
+            return "";
+        }
+    }
+
+    public static String buildCreateSql(String tableName, List<SQLName> columns, DbType dbType) {
+        return "";
     }
 }
