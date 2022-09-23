@@ -217,6 +217,9 @@ public class SQLSelectStateInfo {
                     continue;
                 }
                 ArrayList<SQLExpr> exprs = exprOfSelectItem.get(new SQLObjectWrapper<>(item));
+                if(exprs == null){
+                    continue;
+                }
                 for (SQLExpr x : exprs) {
                     SQLAggregateExpr xAggExpr = (SQLAggregateExpr) SQLFunc.getParentObject(x, SQLAggregateExpr.class);
                     if (xAggExpr != null && xAggExpr.getMethodName().equalsIgnoreCase("count"))

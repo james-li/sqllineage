@@ -131,7 +131,8 @@ public class SQLFunc {
         } else if (item.getExpr() instanceof SQLPropertyExpr) {
             return ((SQLPropertyExpr) item.getExpr()).getName();
         } else {
-            throw new ParserException("Can not parse sql expr as column: " + item.getExpr().toString());
+            //throw new ParserException("Can not parse sql expr as column: " + item.getExpr().toString());
+            return item.toString();
         }
     }
 

@@ -8,7 +8,10 @@ import com.alibaba.druid.sql.ast.statement.*;
 import com.alibaba.druid.sql.dialect.mysql.parser.MySqlStatementParser;
 import com.alibaba.druid.sql.parser.ParserException;
 import com.alibaba.druid.sql.parser.SQLStatementParser;
+import com.alibaba.druid.sql.repository.SchemaObject;
+import com.alibaba.druid.sql.repository.SchemaRepository;
 import com.alibaba.druid.stat.TableStat;
+import com.alibaba.druid.util.StringUtils;
 import com.hfepay.sqlparser.ISchemaRepository;
 import com.hfepay.sqlparser.SQLParser;
 import com.hfepay.sqlparser.common.SQLFunc;
@@ -25,6 +28,7 @@ public abstract class SQLParserImpl implements SQLParser {
     protected String sql;
     protected List<SQLStatement> stmts = null;
     protected SQLSelectStatement selectStmt = null;
+    private String dstTable = null;
 //    protected SQLWithSubqueryClause withSubqueryClauses = null;
 
     public SQLParserImpl(DbType dbType, String sql) {
@@ -38,10 +42,12 @@ public abstract class SQLParserImpl implements SQLParser {
                 selectStmt = (SQLSelectStatement) stmt;
 //                withSubqueryClauses = selectStmt.getSelect().getWithSubQuery();
             } else if (stmt instanceof SQLCreateTableStatement) {
+                dstTable = ((SQLCreateTableStatement) stmt).getTableName();
                 selectStmt = new SQLSelectStatement(((SQLCreateTableStatement) stmt).getSelect());
                 selectStmt.getSelect().setWithSubQuery(((SQLCreateTableStatement) stmt).getSelect().getWithSubQuery());
 //                withSubqueryClauses = selectStmt.getSelect().getWithSubQuery();
             } else if (stmt instanceof SQLInsertStatement) {
+                dstTable = ((SQLInsertStatement) stmt).getTableName().toString();
                 selectStmt = new SQLSelectStatement(((SQLInsertStatement) stmt).getQuery());
                 selectStmt.getSelect().setWithSubQuery(((SQLInsertStatement) stmt).getWith());
 //                withSubqueryClauses = ((SQLInsertStatement) stmt).getWith();
@@ -89,15 +95,30 @@ public abstract class SQLParserImpl implements SQLParser {
         DbLinageSchemaStateVisitor visitor = getDbLinageSchemaStateVisitor();
         if (visitor == null)
             return null;
-        visitor.setRepository(this.schemaRepository.getSchemaRepository(DbType.hive));
+        SchemaRepository repository = schemaRepository.getSchemaRepository(dbType);
+        visitor.setRepository(repository);
         this.selectStmt.accept(visitor);
         SQLSelectStateInfo selectStateInfo = visitor.getSelectStatInfo();
         HashMap<SQLObjectWrapper<SQLSelectItem>, ArrayList<TableStat.Column>> tableLinageMap =
                 (HashMap<SQLObjectWrapper<SQLSelectItem>, ArrayList<TableStat.Column>>) selectStateInfo.getTableLinageMap();
         LinkedHashMap<String, ArrayList<TableStat.Column>> tableLinage = new LinkedHashMap<>();
         try {
-            for (SQLSelectItem item : selectStmt.getSelect().getQueryBlock().getSelectList()) {
-                tableLinage.put(SQLFunc.getColumnName(item), tableLinageMap.get(new SQLObjectWrapper<>(item)));
+            List<SQLSelectItem> selectList = selectStmt.getSelect().getQueryBlock().getSelectList();
+            SchemaObject schemaObject = repository.findTable(dstTable);
+            for (int i = 0; i < selectList.size(); i++) {
+                SQLSelectItem item = selectList.get(i);
+                String columnName = null;
+                if (schemaObject != null) {
+                    try {
+                        SQLCreateTableStatement createTableStatement = (SQLCreateTableStatement) schemaObject.getStatement();
+                        SQLColumnDefinition columnDefinition = (SQLColumnDefinition) createTableStatement.getTableElementList().get(i);
+                        columnName = columnDefinition.getColumnName();
+                    } catch (Exception e) {
+                    }
+                }
+                if (columnName == null)
+                    columnName = SQLFunc.getColumnName(item);
+                tableLinage.put(columnName, tableLinageMap.get(new SQLObjectWrapper<>(item)));
             }
             return tableLinage;
         } catch (ParserException e) {
