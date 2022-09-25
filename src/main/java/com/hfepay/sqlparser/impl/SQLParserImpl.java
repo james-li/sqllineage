@@ -2,23 +2,18 @@ package com.hfepay.sqlparser.impl;
 
 import com.alibaba.druid.DbType;
 import com.alibaba.druid.sql.ast.SQLStatement;
-import com.alibaba.druid.sql.ast.expr.SQLIdentifierExpr;
-import com.alibaba.druid.sql.ast.expr.SQLPropertyExpr;
 import com.alibaba.druid.sql.ast.statement.*;
-import com.alibaba.druid.sql.dialect.mysql.parser.MySqlStatementParser;
 import com.alibaba.druid.sql.parser.ParserException;
 import com.alibaba.druid.sql.parser.SQLStatementParser;
 import com.alibaba.druid.sql.repository.SchemaObject;
 import com.alibaba.druid.sql.repository.SchemaRepository;
 import com.alibaba.druid.stat.TableStat;
-import com.alibaba.druid.util.StringUtils;
 import com.hfepay.sqlparser.ISchemaRepository;
 import com.hfepay.sqlparser.SQLParser;
 import com.hfepay.sqlparser.common.SQLFunc;
 import com.hfepay.sqlparser.common.SQLObjectWrapper;
 import com.hfepay.sqlparser.common.SQLSelectStateInfo;
 
-import javax.swing.table.TableColumn;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -92,12 +87,12 @@ public abstract class SQLParserImpl implements SQLParser {
     @Override
     public LinkedHashMap<String, ArrayList<TableStat.Column>> analysisLineage() {
 //        HiveLinageSchemaStateVisitor visitor = new HiveLinageSchemaStateVisitor();
-        DbLinageSchemaStateVisitor visitor = getDbLinageSchemaStateVisitor();
-        if (visitor == null)
-            return null;
         SchemaRepository repository = schemaRepository.getSchemaRepository(dbType);
+
+        DbLinageSchemaStateVisitor visitor = getDbLinageSchemaStateVisitor();
         visitor.setRepository(repository);
         this.selectStmt.accept(visitor);
+
         SQLSelectStateInfo selectStateInfo = visitor.getSelectStatInfo();
         HashMap<SQLObjectWrapper<SQLSelectItem>, ArrayList<TableStat.Column>> tableLinageMap =
                 (HashMap<SQLObjectWrapper<SQLSelectItem>, ArrayList<TableStat.Column>>) selectStateInfo.getTableLinageMap();
@@ -153,4 +148,22 @@ public abstract class SQLParserImpl implements SQLParser {
 
     }
 
+    public static String buildCreateSql(String tableName, List<String> columns, DbType dbType) {
+        StringBuilder sb = new StringBuilder();
+        sb.append("create table " + tableName + "(");
+        for (int i = 0; i < columns.size(); i++) {
+            String column = columns.get(i);
+            sb.append("\n");
+            if (dbType == DbType.hive) {
+                sb.append(column + " string");
+            } else {
+                sb.append(column + " int");
+            }
+            if (i != columns.size() - 1) {
+                sb.append(",");
+            }
+        }
+        sb.append(")");
+        return sb.toString();
+    }
 }

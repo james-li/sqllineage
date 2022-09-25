@@ -1,15 +1,13 @@
 package com.hfepay.sqlparser.common;
 
-import com.alibaba.druid.DbType;
 import com.alibaba.druid.sql.ast.SQLExpr;
 import com.alibaba.druid.sql.ast.SQLName;
-import com.alibaba.druid.sql.ast.SQLObject;
-import com.alibaba.druid.sql.ast.SQLStatement;
 import com.alibaba.druid.sql.ast.expr.SQLAggregateExpr;
 import com.alibaba.druid.sql.ast.expr.SQLAllColumnExpr;
 import com.alibaba.druid.sql.ast.expr.SQLIdentifierExpr;
 import com.alibaba.druid.sql.ast.expr.SQLPropertyExpr;
 import com.alibaba.druid.sql.ast.statement.*;
+import com.alibaba.druid.sql.repository.SchemaObject;
 import com.alibaba.druid.sql.repository.SchemaRepository;
 import com.alibaba.druid.stat.TableStat;
 import com.alibaba.druid.util.StringUtils;
@@ -144,9 +142,134 @@ public class SQLSelectStateInfo {
         return null;
     }*/
 
-    public HashSet<TableStat.Column> getExprLineage(SQLExpr expr) {
-        return getExprLineage(expr, null);
+
+    public HashSet<TableStat.Column> getExprLineage(SQLExpr expr, SQLTableSource tableSource) {
+        HashSet<TableStat.Column> columns = new HashSet<>();
+        if (tableSource == null) {
+            tableSource = ((SQLSelectQueryBlock) SQLFunc.getParentObject(expr, SQLSelectQueryBlock.class)).getFrom();
+        }
+        String exprName = SQLFunc.getName(expr);
+        if (StringUtils.isEmpty(exprName)) {
+            return columns;
+        }
+        if (tableSource instanceof SQLExprTableSource) {
+            String tableName = ((SQLExprTableSource) tableSource).getTableName();
+            SQLWithSubqueryClause.Entry entry = withMap.get(new SQLObjectWrapper<>(tableSource));
+            if (entry != null) {
+                SQLSubqueryTableSource subqueryTableSource = new SQLSubqueryTableSource(entry.getSubQuery());
+                columns.addAll(getExprLineage(expr, subqueryTableSource));
+            } else {
+                SQLColumnDefinition column = repository.findColumn(tableSource, expr);
+                if (column != null) {
+                    columns.add(new TableStat.Column(tableName, column.getColumnName()));
+                } else {
+                    columns.add(new TableStat.Column(tableName, exprName));
+                }
+            }
+        } else if (tableSource instanceof SQLJoinTableSource) {
+            HashSet<TableStat.Column> c = getExprLineage(expr, ((SQLJoinTableSource) tableSource).getLeft());
+            if (c.size() == 0) {
+                c = getExprLineage(expr, ((SQLJoinTableSource) tableSource).getRight());
+            }
+            columns.addAll(c);
+        } else if (tableSource instanceof SQLSubqueryTableSource) {
+            SQLSubqueryTableSource subqueryTableSource = (SQLSubqueryTableSource) tableSource;
+            SQLTableSource from = subqueryTableSource.getSelect().getQueryBlock().getFrom();
+            HashMap<SQLObjectWrapper<SQLSelectItem>, SQLTableSource> allColumnTable = new HashMap<>();
+            for (SQLSelectItem item : subqueryTableSource.getSelect().getQueryBlock().getSelectList()) {
+                if (StringUtils.equals(SQLFunc.getColumnName(item), exprName)) {
+                    columns.addAll(getExprLineage(item, from));
+                    allColumnTable.clear();
+                    break;
+                }
+                if (item.getExpr() instanceof SQLAllColumnExpr ||
+                        (item.getExpr() instanceof SQLIdentifierExpr && StringUtils.equalsIgnoreCase("*", ((SQLIdentifierExpr) item.getExpr()).getName()))) {
+                    SQLTableSource itemTableSource = SQLFunc.getResolvedTableSource(item.getExpr());
+                    if (itemTableSource != null)
+                        allColumnTable.put(new SQLObjectWrapper<>(item), itemTableSource);
+                }
+
+            }
+            for (SQLTableSource tSource : allColumnTable.values()) {
+                HashSet<TableStat.Column> c = getExprLineage(expr, tSource);
+                if (c.size() > 0) {
+                    columns.addAll(c);
+                    break;
+                }
+            }
+        } else if (tableSource instanceof SQLUnionQueryTableSource) {
+            int idx = -1;
+            SQLUnionQueryTableSource unionQueryTableSource = (SQLUnionQueryTableSource) tableSource;
+            for (SQLSelectQuery query : unionQueryTableSource.getUnion().getChildren()) {
+                if (!(query instanceof SQLSelectQueryBlock)) {
+                    continue;
+                }
+                SQLSelectQueryBlock block = (SQLSelectQueryBlock) query;
+                SQLSelectItem matchedItem = null;
+                if (idx == -1) {
+                    matchedItem = block.findSelectItem(exprName);
+                    idx = block.getSelectList().indexOf(matchedItem);
+                } else {
+                    /**
+                     * FIXME:
+                     * select a,b,c from t1 union select * from t2
+                     */
+                    matchedItem = block.getSelectItem(idx);
+                }
+                if (matchedItem != null)
+                    columns.addAll(getExprLineage(matchedItem, block.getFrom()));
+            }
+        } else if (tableSource instanceof SQLWithSubqueryClause.Entry) {
+            SQLWithSubqueryClause.Entry with = (SQLWithSubqueryClause.Entry) tableSource;
+            SQLSelectQuery query = with.getSubQuery().getQuery();
+            if (query instanceof SQLUnionQuery)
+                columns.addAll(getExprLineage(expr, new SQLUnionQueryTableSource((SQLUnionQuery) query)));
+            else
+                columns.addAll(getExprLineage(expr, new SQLSubqueryTableSource(query)));
+        }
+
+        return columns;
     }
+
+    public HashSet<TableStat.Column> getExprLineage(SQLSelectItem item) {
+        return getExprLineage(item, null);
+    }
+
+    public HashSet<TableStat.Column> getExprLineage(SQLSelectItem item, SQLTableSource tableSource) {
+        HashSet<TableStat.Column> columns = new HashSet<>();
+        ArrayList<SQLExpr> exprs = exprOfSelectItem.get(new SQLObjectWrapper<>(item));
+        if (exprs == null) {
+            return columns;
+        }
+        SQLSelectQueryBlock block = (SQLSelectQueryBlock) SQLFunc.getParentObject(item, SQLSelectQueryBlock.class);
+        if (block == null)
+            return columns;
+        if (tableSource == null) {
+            tableSource = block.getFrom();
+        }
+        for (SQLExpr x : exprs) {
+            SQLAggregateExpr xAggExpr = (SQLAggregateExpr) SQLFunc.getParentObject(x, SQLAggregateExpr.class);
+            if (xAggExpr != null && xAggExpr.getMethodName().equalsIgnoreCase("count"))
+                continue;
+            String exprName = SQLFunc.getName(x);
+            SQLTableSource from = tableSource;
+            if (x instanceof SQLAllColumnExpr ||
+                    (x instanceof SQLIdentifierExpr && "*".equals(((SQLIdentifierExpr) x).getName()))) {
+                from = SQLFunc.getResolvedTableSource(x);
+                if (from == null) {
+                    from = tableSource;
+                }
+                SQLIdentifierExpr alt = new SQLIdentifierExpr(exprName);
+                alt.setParent(x.getParent());
+                x = alt;
+            }
+            columns.addAll(getExprLineage(x, from));
+        }
+        return columns;
+    }
+
+
+/*
 
     public HashSet<TableStat.Column> getExprLineage(SQLExpr expr, SQLTableSource tableSource) {
         HashSet<TableStat.Column> columns = new HashSet<>();
@@ -171,12 +294,13 @@ public class SQLSelectStateInfo {
             String tableName = ((SQLExprTableSource) tableSource).getTableName();
             SQLWithSubqueryClause.Entry entry = withMap.get(new SQLObjectWrapper<>(tableSource));
             if (entry != null) {
-                SQLSelect query = entry.getSubQuery();
-                if (repository != null)
-                    repository.resolve(query);
-                SQLSubqueryTableSource subqueryTableSource = new SQLSubqueryTableSource(query);
-                subqueryTableSource.setParent(tableSource.getParent());
-                columns.addAll(getExprLineage(expr, subqueryTableSource));
+                SQLSelectQueryBlock queryBlock = entry.getSubQuery().getQueryBlock();
+                for (SQLSelectItem item : queryBlock.getSelectList()) {
+                    if (StringUtils.equalsIgnoreCase(SQLFunc.getColumnName(item), exprName)) {
+                        columns.addAll(getExprLineage(item));
+                        break;
+                    }
+                }
             } else {
                 columns.add(new TableStat.Column(tableName, ((SQLName) expr).getSimpleName()));
             }
@@ -216,37 +340,12 @@ public class SQLSelectStateInfo {
                 if (item == null) {
                     continue;
                 }
-                ArrayList<SQLExpr> exprs = exprOfSelectItem.get(new SQLObjectWrapper<>(item));
-                if(exprs == null){
-                    continue;
-                }
-                for (SQLExpr x : exprs) {
-                    SQLAggregateExpr xAggExpr = (SQLAggregateExpr) SQLFunc.getParentObject(x, SQLAggregateExpr.class);
-                    if (xAggExpr != null && xAggExpr.getMethodName().equalsIgnoreCase("count"))
-                        continue;
-                    SQLTableSource subTableSource = SQLFunc.getResolvedTableSource(x);
-                    if (subTableSource == null) {
-                        subTableSource = block.findTableSourceWithColumn(SQLFunc.getName(x));
-                    }
-                    if (subTableSource == null)
-                        continue;
-                    if (x instanceof SQLAllColumnExpr ||
-                            (x instanceof SQLIdentifierExpr && "*".equals(((SQLIdentifierExpr) x).getName()))) {
-                        SQLIdentifierExpr alt = new SQLIdentifierExpr(exprName);
-                        alt.setParent(x.getParent());
-                        x = alt;
-                    }
-//                    if (subTableSource instanceof SQLWithSubqueryClause.Entry) {
-//                        SQLSubqueryTableSource altTableSource = new SQLSubqueryTableSource(((SQLWithSubqueryClause.Entry) subTableSource).getSubQuery());
-//                        altTableSource.setParent(subTableSource.getParent());
-//                        subTableSource = altTableSource;
-//                    }
-                    columns.addAll(getExprLineage(x, subTableSource));
-                }
+                columns.addAll(getExprLineage(item));
             }
         }
         return columns;
     }
+*/
 
     public void addQueryBlock(SQLSelectQueryBlock queryBlock) {
         this.queryBlocks.add(queryBlock);
@@ -307,18 +406,14 @@ public class SQLSelectStateInfo {
     public void resolveLineage() {
         resolveQueryColumns();
         tableLinageMap = exprOfSelectItem
-                .entrySet()
+                .keySet()
                 .stream()
-                .filter(x -> SQLFunc.isMainSelectItem((SQLSelectItem) x.getKey().getObject()))
+                .filter(x -> SQLFunc.isMainSelectItem((SQLSelectItem) x.getObject()))
                 .collect(Collectors.toMap(
-                        Map.Entry::getKey,
-                        x -> x.getValue()
-                                .stream()
-                                .map(this::getExprLineage)
-                                .flatMap(Set::stream)
-                                .collect(Collectors.toCollection(ArrayList::new)
-                                )
-                ));
+                        x -> x,
+                        x -> new ArrayList<>(getExprLineage((SQLSelectItem) x.getObject()))
+                ))
+        ;
     }
 
     public Map<SQLObjectWrapper<SQLSelectItem>, ArrayList<TableStat.Column>> getTableLinageMap() {

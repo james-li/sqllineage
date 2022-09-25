@@ -3,16 +3,18 @@ package com.hfepay.sqlparser.impl;
 import com.alibaba.druid.DbType;
 import com.alibaba.druid.sql.ast.SQLExpr;
 import com.alibaba.druid.sql.ast.SQLObject;
-import com.alibaba.druid.sql.ast.expr.SQLAggregateExpr;
 import com.alibaba.druid.sql.ast.expr.SQLAllColumnExpr;
 import com.alibaba.druid.sql.ast.expr.SQLIdentifierExpr;
 import com.alibaba.druid.sql.ast.expr.SQLPropertyExpr;
 import com.alibaba.druid.sql.ast.statement.*;
+import com.alibaba.druid.sql.repository.SchemaObject;
 import com.alibaba.druid.sql.repository.SchemaRepository;
 import com.alibaba.druid.sql.visitor.SchemaStatVisitor;
 import com.alibaba.druid.util.StringUtils;
 import com.hfepay.sqlparser.common.SQLFunc;
 import com.hfepay.sqlparser.common.SQLSelectStateInfo;
+
+import java.util.stream.Collectors;
 
 public class DbLinageSchemaStateVisitor extends SchemaStatVisitor {
 
@@ -87,12 +89,6 @@ public class DbLinageSchemaStateVisitor extends SchemaStatVisitor {
         selectStatInfo.resolveLineage();
     }
 
-    @Override
-    public boolean visit(SQLWithSubqueryClause.Entry x) {
-        boolean ret = super.visit(x);
-        selectStatInfo.addWithSubQuery(x);
-        return ret;
-    }
 
     @Override
     public boolean visit(SQLExprTableSource x) {
@@ -114,6 +110,7 @@ public class DbLinageSchemaStateVisitor extends SchemaStatVisitor {
                     }
                     if (withSubQuery != null) {
                         selectStatInfo.addWithMap(x, withSubQuery);
+                        //x.setSchemaObject(new SchemaObject(tableName, null, null));
                         break;
                     }
                 }

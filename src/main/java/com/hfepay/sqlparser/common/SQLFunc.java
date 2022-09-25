@@ -55,12 +55,10 @@ public class SQLFunc {
 
     public static boolean isMainSelectItem(SQLSelectItem x) {
         try {
-            if (x
-                    .getParent() //SQLSelectQueryBlock
-                    .getParent() //SQLSelect
-                    .getParent() //SQLSelectStatement
+            SQLSelectStatement s = (SQLSelectStatement) (x.getParent()
                     .getParent()
-                    == null) {
+                    .getParent());
+            if (s.getParent() == null) {
                 return true;
             }
         } catch (Exception e) {
@@ -152,7 +150,5 @@ public class SQLFunc {
         }
     }
 
-    public static String buildCreateSql(String tableName, List<SQLName> columns, DbType dbType) {
-        return "";
-    }
+
 }
